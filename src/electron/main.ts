@@ -7,6 +7,7 @@ import {
   RuntimeManager,
   buildCompatibilityMatrix,
   discoverClusterPeers,
+  inspectPreparedArk,
   loadModelCatalog,
   loadRuntimeCatalog,
   prepareArk,
@@ -22,9 +23,15 @@ async function scan() {
     loadModelCatalog(),
     diskManager.detectExternalDisks(),
   ]);
+  const assessments = disks.map((disk) => diskManager.assess(disk));
+  const prepared = await Promise.all(assessments.map((assessment) => inspectPreparedArk(assessment)));
   return {
     hardware,
-    disks: disks.map((disk) => diskManager.assess(disk)),
+    disks: assessments.map((assessment, index) => ({
+      ...assessment,
+      arkPrepared: prepared[index]?.prepared ?? false,
+      arkRoot: prepared[index]?.root ?? null,
+    })),
     compatibility: buildCompatibilityMatrix(catalog, hardware),
   };
 }
@@ -81,10 +88,10 @@ function registerIpc(): void {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1180,
-    height: 820,
-    minWidth: 900,
-    minHeight: 650,
+    width: 960,
+    height: 780,
+    minWidth: 760,
+    minHeight: 620,
     backgroundColor: "#08100d",
     title: "AiArk",
     webPreferences: {

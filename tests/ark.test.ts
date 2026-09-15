@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { prepareArk, previewPreparation } from "../src/core/ark";
+import { inspectPreparedArk, prepareArk, previewPreparation } from "../src/core/ark";
 import { DiskAssessment, ModelCatalog } from "../src/core/types";
 
 const temporary: string[] = [];
@@ -53,5 +53,14 @@ describe("ark preparation", () => {
     const assessment = await fixture();
     await mkdir(path.join(assessment.mountedWritableVolume!.mountPoint!, "AIARK"));
     await expect(prepareArk(assessment, assessment.confirmation, catalog)).rejects.toMatchObject({ code: "FOREIGN_DIRECTORY" });
+  });
+
+  it("recognizes only an ark prepared for the connected disk", async () => {
+    const assessment = await fixture();
+    expect(await inspectPreparedArk(assessment)).toMatchObject({ prepared: false });
+    const result = await prepareArk(assessment, assessment.confirmation, catalog);
+    expect(await inspectPreparedArk(assessment)).toEqual({ prepared: true, root: result.root });
+    assessment.disk.fingerprint = "ANOTHER-DISK";
+    expect(await inspectPreparedArk(assessment)).toEqual({ prepared: false, root: result.root });
   });
 });

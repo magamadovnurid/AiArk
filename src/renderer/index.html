@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,71 +8,72 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="ambient ambient-a"></div>
-    <div class="ambient ambient-b"></div>
     <header class="topbar">
-      <div class="brand"><span class="brand-mark">A</span><span>AIARK</span></div>
-      <div class="top-actions">
-        <span class="safety-pill"><i></i> SAFE MODE</span>
-        <button id="scan-button" class="button button-secondary">Rescan system</button>
-      </div>
+      <div class="brand">AiArk <span>Безопасный режим</span></div>
+      <button id="scan-button" class="button button-secondary">Обновить</button>
     </header>
 
-    <main>
-      <section class="hero">
-        <div>
-          <p class="eyebrow">PORTABLE AI INFRASTRUCTURE</p>
-          <h1>Your models.<br /><span>Every machine.</span></h1>
-          <p class="lede">One external ark for verified model files. Native runtimes stay fast, local, and platform-correct.</p>
-        </div>
-        <div id="hardware-summary" class="hardware-summary skeleton">Scanning hardware…</div>
+    <main class="shell">
+      <section class="intro" aria-labelledby="page-title">
+        <h1 id="page-title">Подготовьте внешний диск</h1>
+        <p>AiArk проверит диск и ничего не форматирует автоматически.</p>
+        <div id="hardware-summary" class="machine-line skeleton">Проверяем этот компьютер…</div>
       </section>
 
-      <section class="section-block">
-        <div class="section-heading">
-          <div><span class="step">01</span><h2>Select the ark disk</h2></div>
-          <p>Only external disks are shown. Nothing is changed during scanning.</p>
+      <section class="primary-panel" aria-labelledby="disk-title">
+        <div class="panel-heading">
+          <h2 id="disk-title">Внешний диск</h2>
+          <span id="disk-count" class="quiet"></span>
         </div>
-        <div id="disk-list" class="disk-grid"><div class="empty-state">Looking for external disks…</div></div>
+        <div id="disk-list" class="disk-list">
+          <div class="empty-state">Ищем подключённые диски…</div>
+        </div>
+        <div id="preview-section" class="hidden">
+          <div class="divider"></div>
+          <div id="preview-card"></div>
+        </div>
       </section>
 
-      <section id="preview-section" class="section-block hidden">
-        <div class="section-heading">
-          <div><span class="step">02</span><h2>Review the dry run</h2></div>
-          <span class="dry-pill">DRY RUN · ZERO WRITES</span>
+      <details id="models-section" class="fold">
+        <summary>
+          <span>Модели</span>
+          <span id="model-summary-meta" class="summary-meta">Проверяем совместимость…</span>
+        </summary>
+        <div id="model-list" class="model-list">
+          <div class="empty-state">Сначала проверим компьютер.</div>
         </div>
-        <div id="preview-card" class="preview-card"></div>
-      </section>
+      </details>
 
-      <section class="section-block">
-        <div class="section-heading">
-          <div><span class="step">03</span><h2>Machine-fit model catalog</h2></div>
-          <p>Recommendations are calculated locally from RAM, GPU memory, OS and architecture.</p>
+      <details class="fold">
+        <summary>
+          <span>Дополнительно</span>
+          <span class="summary-meta">Движок и локальная сеть</span>
+        </summary>
+        <div class="advanced-grid">
+          <section class="utility-card">
+            <h3>Локальный движок</h3>
+            <p>Устанавливается на компьютер, а не на внешний диск.</p>
+            <div class="button-row">
+              <button data-action="runtime-plan" class="button button-secondary">Проверить</button>
+              <button data-action="runtime-install" class="button button-primary">Установить</button>
+            </div>
+            <pre id="runtime-result" class="result-box hidden"></pre>
+          </section>
+          <section class="utility-card">
+            <h3>Компьютеры рядом</h3>
+            <p>Ищет другие AiArk в вашей локальной сети.</p>
+            <button data-action="cluster" class="button button-secondary">Найти</button>
+            <div id="cluster-result" class="result-box hidden"></div>
+          </section>
         </div>
-        <div id="model-list" class="model-grid"><div class="empty-state">Waiting for the hardware profile…</div></div>
-      </section>
-
-      <section class="two-column">
-        <article class="section-block compact">
-          <div class="section-heading"><div><span class="step">04</span><h2>Local runtime</h2></div></div>
-          <p class="muted">llama.cpp is selected for this machine and installed in local app data — never on the ExFAT ark.</p>
-          <div class="button-row">
-            <button data-action="runtime-plan" class="button button-secondary">Preview runtime</button>
-            <button data-action="runtime-install" class="button button-primary">Install locally</button>
-          </div>
-          <pre id="runtime-result" class="result-box hidden"></pre>
-        </article>
-        <article class="section-block compact">
-          <div class="section-heading"><div><span class="step">05</span><h2>Cluster discovery</h2></div></div>
-          <p class="muted">Find AiArk peers on the local network. Discovery advertises capabilities only; it grants no remote execution.</p>
-          <button data-action="cluster" class="button button-secondary">Discover peers</button>
-          <div id="cluster-result" class="result-box hidden"></div>
-        </article>
-      </section>
+      </details>
     </main>
 
-    <div id="progress" class="progress-toast hidden"><div><strong id="progress-title">Downloading</strong><span id="progress-label"></span></div><div class="progress-track"><i id="progress-bar"></i></div></div>
-    <div id="toast" class="toast hidden"></div>
+    <div id="progress" class="progress-toast hidden">
+      <div><strong id="progress-title">Загрузка</strong><span id="progress-label"></span></div>
+      <div class="progress-track"><i id="progress-bar"></i></div>
+    </div>
+    <div id="toast" class="toast hidden" role="status"></div>
     <script src="./app.js"></script>
   </body>
 </html>

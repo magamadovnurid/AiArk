@@ -39,6 +39,11 @@ export interface ArkMetadata {
   updatedAt: string;
 }
 
+export interface PreparedArkStatus {
+  prepared: boolean;
+  root: string | null;
+}
+
 function rootFor(assessment: DiskAssessment): string | null {
   return assessment.mountedWritableVolume?.mountPoint
     ? path.join(assessment.mountedWritableVolume.mountPoint, "AIARK")
@@ -71,6 +76,28 @@ async function existingMetadata(root: string): Promise<ArkMetadata | null> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw new AiArkError("Existing ark.json is not readable JSON", "INVALID_ARK_METADATA", error);
+  }
+}
+
+export async function inspectPreparedArk(assessment: DiskAssessment): Promise<PreparedArkStatus> {
+  const mountPoint = assessment.mountedWritableVolume?.mountPoint;
+  if (!mountPoint) return { prepared: false, root: null };
+  let root: string;
+  try {
+    root = path.join(await realpath(mountPoint), "AIARK");
+  } catch {
+    return { prepared: false, root: path.join(mountPoint, "AIARK") };
+  }
+  try {
+    const metadata = await existingMetadata(root);
+    return {
+      prepared: metadata?.schemaVersion === 1
+        && metadata.label === "AIARK"
+        && metadata.diskFingerprint === assessment.disk.fingerprint,
+      root,
+    };
+  } catch {
+    return { prepared: false, root };
   }
 }
 
