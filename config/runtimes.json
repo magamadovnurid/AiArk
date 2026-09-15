@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "runtimes": [
+    {
+      "id": "llama.cpp",
+      "name": "llama.cpp",
+      "releasesApi": "https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=10",
+      "executable": {
+        "darwin": "llama-cli",
+        "linux": "llama-cli",
+        "win32": "llama-cli.exe"
+      },
+      "assets": [
+        {
+          "platform": "darwin",
+          "arch": "arm64",
+          "accelerator": "metal",
+          "pattern": "^llama-b[0-9]+-bin-macos-arm64\\.tar\\.gz$"
+        },
+        {
+          "platform": "darwin",
+          "arch": "x64",
+          "accelerator": "metal",
+          "pattern": "^llama-b[0-9]+-bin-macos-x64\\.tar\\.gz$"
+        },
+        {
+          "platform": "linux",
+          "arch": "x64",
+          "accelerator": "cuda",
+          "pattern": "^llama-b[0-9]+-bin-ubuntu-cuda-[0-9.]+-x64\\.tar\\.gz$"
+        },
+        {
+          "platform": "linux",
+          "arch": "x64",
+          "accelerator": "rocm",
+          "pattern": "^llama-b[0-9]+-bin-ubuntu-rocm-[0-9.]+-x64\\.tar\\.gz$"
+        },
+        {
+          "platform": "linux",
+          "arch": "arm64",
+          "accelerator": "vulkan",
+          "pattern": "^llama-b[0-9]+-bin-ubuntu-vulkan-arm64\\.tar\\.gz$"
+        },
+        {
+          "platform": "linux",
+          "arch": "x64",
+          "accelerator": "vulkan",
+          "pattern": "^llama-b[0-9]+-bin-ubuntu-vulkan-x64\\.tar\\.gz$"
+        },
+        {
+          "platform": "linux",
+          "arch": "x64",
+          "accelerator": "cpu",
+          "pattern": "^llama-b[0-9]+-bin-ubuntu-x64\\.tar\\.gz$"
+        },
+        {
+          "platform": "linux",
+          "arch": "arm64",
+          "accelerator": "cpu",
+          "pattern": "^llama-b[0-9]+-bin-ubuntu-arm64\\.tar\\.gz$"
+        },
+        {
+          "platform": "win32",
+          "arch": "x64",
+          "accelerator": "cuda",
+          "pattern": "^llama-b[0-9]+-bin-win-cuda-[0-9.]+-x64\\.zip$"
+        },
+        {
+          "platform": "win32",
+          "arch": "x64",
+          "accelerator": "rocm",
+          "pattern": "^llama-b[0-9]+-bin-win-rocm-[0-9.]+-x64\\.zip$"
+        },
+        {
+          "platform": "win32",
+          "arch": "x64",
+          "accelerator": "vulkan",
+          "pattern": "^llama-b[0-9]+-bin-win-vulkan-x64\\.zip$"
+        },
+        {
+          "platform": "win32",
+          "arch": "x64",
+          "accelerator": "cpu",
+          "pattern": "^llama-b[0-9]+-bin-win-cpu-x64\\.zip$"
+        },
+        {
+          "platform": "win32",
+          "arch": "arm64",
+          "accelerator": "cpu",
+          "pattern": "^llama-b[0-9]+-bin-win-cpu-arm64\\.zip$"
+        }
+      ]
+    }
+  ]
+}
