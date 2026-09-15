@@ -8,8 +8,19 @@ updates:
     groups:
       development-dependencies:
         dependency-type: development
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      official-actions:
+        patterns:
+          - "actions/*"
+          - "github/*"
+        update-types:
+          - minor
+          - patch
