@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "description": "Portable, cross-platform AI model ark manager",
   "license": "MIT",
+  "homepage": "https://github.com/magamadovnurid/AiArk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/magamadovnurid/AiArk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/magamadovnurid/AiArk/issues"
+  },
   "author": {
     "name": "Nurid Magamadov",
     "email": "maganurid@gmail.com"
@@ -43,6 +51,12 @@
     },
     "win": {
       "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "artifactName": "AiArk-Setup-${version}-win-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "AiArk-Portable-${version}-win-${arch}.${ext}"
     },
     "linux": {
       "category": "Utility",
