@@ -65,11 +65,11 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.5.1",
     "electron": "^44.3.0",
     "electron-builder": "^26.0.12",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.2",
+    "typescript": "^7.0.2",
     "vitest": "^5.0.1"
   },
   "engines": {
