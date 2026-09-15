@@ -1,0 +1,81 @@
+{
+  "name": "aiark",
+  "version": "0.1.0",
+  "description": "Portable, cross-platform AI model ark manager",
+  "license": "MIT",
+  "homepage": "https://github.com/magamadovnurid/AiArk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/magamadovnurid/AiArk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/magamadovnurid/AiArk/issues"
+  },
+  "author": {
+    "name": "Nurid Magamadov",
+    "email": "maganurid@gmail.com"
+  },
+  "desktopName": "aiark.desktop",
+  "main": "dist/electron/main.js",
+  "bin": {
+    "aiark": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup src/cli.ts src/electron/main.ts src/electron/preload.ts --format cjs --out-dir dist --sourcemap --clean --external electron",
+    "dev": "npm run build && electron .",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm test && npm run build",
+    "dist": "npm run check && electron-builder",
+    "dist:dir": "npm run check && electron-builder --dir"
+  },
+  "build": {
+    "appId": "dev.aiark.desktop",
+    "productName": "AiArk",
+    "artifactName": "AiArk-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "src/renderer/**/*",
+      "config/**/*",
+      "README.md",
+      "LICENSE"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "artifactName": "AiArk-Setup-${version}-win-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "AiArk-Portable-${version}-win-${arch}.${ext}"
+    },
+    "linux": {
+      "category": "Utility",
+      "syncDesktopName": true,
+      "target": ["AppImage", "deb"]
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.0.12",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "vitest": "^5.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "esbuild": "^0.28.2"
+  }
+}

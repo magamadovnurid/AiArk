@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'" />
+    <title>AiArk</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">AiArk <span>Безопасный режим</span></div>
+      <button id="scan-button" class="button button-secondary">Обновить</button>
+    </header>
+
+    <main class="shell">
+      <section class="intro" aria-labelledby="page-title">
+        <h1 id="page-title">Подготовьте внешний диск</h1>
+        <p>AiArk проверит диск и ничего не форматирует автоматически.</p>
+        <div id="hardware-summary" class="machine-line skeleton">Проверяем этот компьютер…</div>
+      </section>
+
+      <section class="primary-panel" aria-labelledby="disk-title">
+        <div class="panel-heading">
+          <h2 id="disk-title">Внешний диск</h2>
+          <span id="disk-count" class="quiet"></span>
+        </div>
+        <div id="disk-list" class="disk-list">
+          <div class="empty-state">Ищем подключённые диски…</div>
+        </div>
+        <div id="preview-section" class="hidden">
+          <div class="divider"></div>
+          <div id="preview-card"></div>
+        </div>
+      </section>
+
+      <details id="models-section" class="fold">
+        <summary>
+          <span>Модели</span>
+          <span id="model-summary-meta" class="summary-meta">Проверяем совместимость…</span>
+        </summary>
+        <div id="model-list" class="model-list">
+          <div class="empty-state">Сначала проверим компьютер.</div>
+        </div>
+      </details>
+
+      <details class="fold">
+        <summary>
+          <span>Дополнительно</span>
+          <span class="summary-meta">Движок и локальная сеть</span>
+        </summary>
+        <div class="advanced-grid">
+          <section class="utility-card">
+            <h3>Локальный движок</h3>
+            <p>Устанавливается на компьютер, а не на внешний диск.</p>
+            <div class="button-row">
+              <button data-action="runtime-plan" class="button button-secondary">Проверить</button>
+              <button data-action="runtime-install" class="button button-primary">Установить</button>
+            </div>
+            <pre id="runtime-result" class="result-box hidden"></pre>
+          </section>
+          <section class="utility-card">
+            <h3>Компьютеры рядом</h3>
+            <p>Ищет другие AiArk в вашей локальной сети.</p>
+            <button data-action="cluster" class="button button-secondary">Найти</button>
+            <div id="cluster-result" class="result-box hidden"></div>
+          </section>
+        </div>
+      </details>
+    </main>
+
+    <div id="progress" class="progress-toast hidden">
+      <div><strong id="progress-title">Загрузка</strong><span id="progress-label"></span></div>
+      <div class="progress-track"><i id="progress-bar"></i></div>
+    </div>
+    <div id="toast" class="toast hidden" role="status"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>

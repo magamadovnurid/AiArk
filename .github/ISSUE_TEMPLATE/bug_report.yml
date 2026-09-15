@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a reproducible problem in AiArk
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve AiArk. Do not include tokens, private model URLs, serial numbers, or other secrets.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: AiArk version
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Connect a disk...
+        2. Open AiArk...
+        3. Select...
+    validations:
+      required: true
+  - type: textarea
+    id: disk
+    attributes:
+      label: Relevant disk details
+      description: Capacity, filesystem, partition scheme, and writable/read-only state. Redact serial numbers and fingerprints.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste only redacted output. Drag files here if needed.
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed tokens, credentials, private URLs, disk serial numbers, and other sensitive data.
+          required: true
