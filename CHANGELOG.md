@@ -4,6 +4,12 @@ All notable changes to AiArk are documented here. The project follows [Semantic 
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-15
+
+### Fixed
+
+- Serialized resumable-download state updates so concurrent chunk workers cannot race while replacing the state file on Windows.
+
 ## [0.1.0] - 2026-09-15
 
 ### Added
@@ -28,5 +34,6 @@ All notable changes to AiArk are documented here. The project follows [Semantic 
 - Reassessment of disk identity and eligibility immediately before preparation.
 - Publisher checksum requirements for model and runtime artifacts.
 
-[Unreleased]: https://github.com/magamadovnurid/AiArk/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/magamadovnurid/AiArk/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/magamadovnurid/AiArk/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/magamadovnurid/AiArk/releases/tag/v0.1.0

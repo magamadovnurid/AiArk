@@ -1,6 +1,6 @@
 {
   "name": "aiark",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Portable, cross-platform AI model ark manager",
   "license": "MIT",
   "homepage": "https://github.com/magamadovnurid/AiArk",
@@ -47,10 +47,16 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "nsis": {
       "artifactName": "AiArk-Setup-${version}-win-${arch}.${ext}"
@@ -61,7 +67,10 @@
     "linux": {
       "category": "Utility",
       "syncDesktopName": true,
-      "target": ["AppImage", "deb"]
+      "target": [
+        "AppImage",
+        "deb"
+      ]
     }
   },
   "devDependencies": {

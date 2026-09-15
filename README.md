@@ -7,7 +7,7 @@
 [![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-83e6a2)](#download)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Русская версия](docs/README.ru.md) · [Download](https://github.com/magamadovnurid/AiArk/releases/latest) · [Documentation](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md)
+[Русская версия](docs/README.ru.md) · [Download](https://github.com/magamadovnurid/AiArk/releases) · [Documentation](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md)
 
 AiArk turns a 4 TB or larger external drive into a portable home for AI model files. Connect the same drive to Windows, macOS, or Linux: AiArk identifies the computer, evaluates which models fit its hardware, verifies every downloaded artifact, and keeps the platform-specific runtime on the computer where it belongs.
 
