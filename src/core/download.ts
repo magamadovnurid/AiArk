@@ -191,6 +191,16 @@ export class ChunkedDownloader {
 
     const pending = Array.from({ length: totalChunks }, (_, index) => index).filter((index) => !completed.has(index));
     let cursor = 0;
+    let stateWrite = Promise.resolve();
+    const persistState = async (): Promise<void> => {
+      const snapshot: DownloadState = {
+        ...state,
+        completedChunks: [...completed].sort((a, b) => a - b),
+        updatedAt: new Date().toISOString(),
+      };
+      stateWrite = stateWrite.then(() => saveState(statePath, snapshot));
+      await stateWrite;
+    };
     const concurrency = Math.max(1, Math.min(options.concurrency ?? 4, 8));
     const workers = Array.from({ length: Math.min(concurrency, pending.length) }, async () => {
       while (cursor < pending.length) {
@@ -206,9 +216,7 @@ export class ChunkedDownloader {
         }
         completed.add(index);
         downloadedBytes += end - start + 1;
-        state.completedChunks = [...completed].sort((a, b) => a - b);
-        state.updatedAt = new Date().toISOString();
-        await saveState(statePath, state);
+        await persistState();
         report();
       }
     });
