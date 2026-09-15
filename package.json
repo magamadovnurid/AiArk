@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "description": "Portable, cross-platform AI model ark manager",
   "license": "MIT",
-  "author": "AiArk contributors",
+  "author": {
+    "name": "Nurid Magamadov",
+    "email": "maganurid@gmail.com"
+  },
+  "desktopName": "aiark.desktop",
   "main": "dist/electron/main.js",
   "bin": {
     "aiark": "dist/cli.js"
@@ -42,6 +46,7 @@
     },
     "linux": {
       "category": "Utility",
+      "syncDesktopName": true,
       "target": ["AppImage", "deb"]
     }
   },

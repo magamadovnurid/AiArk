@@ -76,7 +76,7 @@ async function existingMetadata(root: string): Promise<ArkMetadata | null> {
 
 async function ensureManagedDirectory(root: string, relativePath: string): Promise<string> {
   let current = root;
-  for (const segment of relativePath.split(path.sep).filter(Boolean)) {
+  for (const segment of relativePath.split(/[\\/]/).filter(Boolean)) {
     current = path.join(current, segment);
     try {
       const stats = await lstat(current);
