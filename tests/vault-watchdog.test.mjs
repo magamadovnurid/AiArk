@@ -30,7 +30,7 @@ describe("vault watchdog safety", () => {
       return { isFile: () => true, size: existing[name], mtimeMs: 123 };
     };
     const exists = (file) => file.endsWith("ready.gguf.aria2") || file.endsWith("partial.gguf.aria2");
-    const result = pendingPublicFiles(manifest, root, stat, exists, new Set([files[0].destination]));
+    const result = pendingPublicFiles(manifest, root, stat, exists, new Set([path.resolve(files[0].destination)]));
     expect(result.complete).toBe(1);
     expect(result.pending.map((file) => path.basename(file.destination))).toEqual(["short.gguf", "partial.gguf", "missing.gguf"]);
     expect(result.observedBytes).toBe(260);
