@@ -157,6 +157,8 @@ node dist/cli.js cluster discover --timeout 2000 --json
 
 For authenticated Hugging Face downloads, set `HF_TOKEN` in the process environment. AiArk uses it only as an HTTP authorization header and never writes it to the ark.
 
+For a previously prepared, large macOS vault, an optional [unattended download watchdog](docs/VAULT_WATCHDOG.md) can resume only unfinished public files after a process or network interruption. It requires the exact external disk identity and never formats a disk.
+
 ## Development
 
 ```bash
@@ -174,6 +176,7 @@ Pull requests run validation and native packaging on Windows, macOS, and Linux. 
 - [Architecture and trust boundaries](docs/ARCHITECTURE.md)
 - [Disk and write safety](docs/SAFETY.md)
 - [Model manifest specification](docs/MODEL_MANIFEST.md)
+- [macOS unattended vault download](docs/VAULT_WATCHDOG.md)
 - [MVP boundaries and roadmap](docs/ROADMAP.md)
 - [Release process](docs/RELEASING.md)
 - [Contributing](CONTRIBUTING.md)
