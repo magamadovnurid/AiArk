@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
-import { downloadProcessPids, pendingPublicFiles, queueText, validateDisk } from "../scripts/vault-watchdog.mjs";
+import { downloadProcessPids, mountedAt, pendingPublicFiles, queueText, signalDownloadPids, validateDisk, watchProcessPids } from "../scripts/vault-watchdog.mjs";
 
 const config = { mountPoint: "/Volumes/AIARK", diskUUID: "volume-123", arkId: "ark-123", diskFingerprint: "finger-123" };
 const disk = { MountPoint: "/Volumes/AIARK", VolumeName: "AIARK", Internal: false,
@@ -51,5 +51,32 @@ describe("vault watchdog safety", () => {
       `  101 aria2c --input-file=/tmp/other --save-session=/tmp/other\n` +
       `  102 aria2c --input-file=/tmp/pending --save-session=${resume}\n`;
     expect(downloadProcessPids(ps, resume)).toEqual([102]);
+  });
+
+  it("signals only matching download PIDs and tolerates an already exited process", () => {
+    const signaled = [];
+    const pids = [102, 103];
+    expect(signalDownloadPids(pids, (pid) => {
+      signaled.push(pid);
+      if (pid === 103) throw Object.assign(new Error("gone"), { code: "ESRCH" });
+    })).toEqual(pids);
+    expect(signaled).toEqual(pids);
+  });
+
+  it("finds only detached watchdog workers, not screen wrappers or the downloader", () => {
+    const script = "/Users/mns/Library/Application Support/AiArk/VaultWatchdog/vault-watchdog.mjs";
+    const ps = `1 SCREEN -dmS aiark-vault-watchdog /usr/local/bin/node ${script} watch\n` +
+      `2 login -pflq mns /usr/local/bin/node ${script} watch\n` +
+      `3 node ${script} watch\n` +
+      `4 node ${script} status\n` +
+      `5 /opt/homebrew/bin/aria2c --input-file=/tmp/queue\n`;
+    expect(watchProcessPids(ps, script)).toEqual([3]);
+  });
+
+  it("distinguishes an exact mount from a similarly named volume", () => {
+    const output = "/dev/disk4s2 on /Volumes/AIARK 1 (exfat, local)\n" +
+      "/dev/disk5s1 on /Volumes/OTHER (exfat, local)\n";
+    expect(mountedAt(output, "/Volumes/AIARK")).toBe(false);
+    expect(mountedAt(`/dev/disk4s2 on /Volumes/AIARK (exfat, local)\n${output}`, "/Volumes/AIARK")).toBe(true);
   });
 });
