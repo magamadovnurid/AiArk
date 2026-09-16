@@ -29,7 +29,11 @@
     "test:watch": "vitest",
     "check": "npm run typecheck && npm test && npm run build",
     "dist": "npm run check && electron-builder",
-    "dist:dir": "npm run check && electron-builder --dir"
+    "dist:dir": "npm run check && electron-builder --dir",
+    "vault:watch:install": "node scripts/vault-watchdog.mjs install",
+    "vault:watch:status": "node scripts/vault-watchdog.mjs status",
+    "vault:watch:pause": "node scripts/vault-watchdog.mjs pause",
+    "vault:watch:resume": "node scripts/vault-watchdog.mjs resume"
   },
   "build": {
     "appId": "dev.aiark.desktop",
