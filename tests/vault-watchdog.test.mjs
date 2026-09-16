@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import path from "node:path";
 import { downloadProcessPids, pendingPublicFiles, queueText, validateDisk } from "../scripts/vault-watchdog.mjs";
 
 const config = { mountPoint: "/Volumes/AIARK", diskUUID: "volume-123", arkId: "ark-123", diskFingerprint: "finger-123" };
@@ -24,14 +25,14 @@ describe("vault watchdog safety", () => {
     const manifest = { packages: [{ gated: false, files }, { gated: true, files: [files[0]] }] };
     const existing = { "ready.gguf": 100, "short.gguf": 60, "partial.gguf": 100 };
     const stat = (file) => {
-      const name = file.split("/").at(-1);
+      const name = path.basename(file);
       if (!(name in existing)) throw new Error("ENOENT");
       return { isFile: () => true, size: existing[name], mtimeMs: 123 };
     };
     const exists = (file) => file.endsWith("ready.gguf.aria2") || file.endsWith("partial.gguf.aria2");
     const result = pendingPublicFiles(manifest, root, stat, exists, new Set([files[0].destination]));
     expect(result.complete).toBe(1);
-    expect(result.pending.map((file) => file.destination.split("/").at(-1))).toEqual(["short.gguf", "partial.gguf", "missing.gguf"]);
+    expect(result.pending.map((file) => path.basename(file.destination))).toEqual(["short.gguf", "partial.gguf", "missing.gguf"]);
     expect(result.observedBytes).toBe(260);
   });
 
