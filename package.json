@@ -31,6 +31,8 @@
     "dist": "npm run check && electron-builder",
     "dist:dir": "npm run check && electron-builder --dir",
     "vault:watch:install": "node scripts/vault-watchdog.mjs install",
+    "vault:watch:refresh": "node scripts/vault-watchdog.mjs refresh",
+    "vault:watch:restart-fallback": "node scripts/vault-watchdog.mjs restart-fallback",
     "vault:watch:status": "node scripts/vault-watchdog.mjs status",
     "vault:watch:pause": "node scripts/vault-watchdog.mjs pause",
     "vault:watch:resume": "node scripts/vault-watchdog.mjs resume"

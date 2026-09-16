@@ -13,6 +13,7 @@ const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const STATE_FILE = path.join(DATA_DIR, "state.json");
 const PAUSE_FILE = path.join(DATA_DIR, "paused");
 const LOCK_DIR = path.join(DATA_DIR, "check.lock");
+const INSTALLED_SCRIPT = path.join(DATA_DIR, "vault-watchdog.mjs");
 const LABEL = "dev.aiark.vault-watchdog";
 const PLIST_FILE = path.join(os.homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
 
@@ -92,9 +93,29 @@ export function downloadProcessPids(psOutput, saveSessionPath) {
   });
 }
 
+export function watchProcessPids(psOutput, installedScript) {
+  return psOutput.split("\n").flatMap((line) => {
+    const match = line.match(/^\s*(\d+)\s+(.+)$/);
+    if (!match || !/^(?:\S*\/)?node\s/.test(match[2])) return [];
+    return match[2].includes(`${installedScript} watch`) ? [Number(match[1])] : [];
+  });
+}
+
 function activePids(config) {
   const output = command("/bin/ps", ["-axo", "pid=,command="]);
   return downloadProcessPids(output, config.resumeFile);
+}
+
+export function signalDownloadPids(pids, signal = (pid) => process.kill(pid, "SIGINT")) {
+  for (const pid of pids) {
+    try { signal(pid); }
+    catch (error) { if (error.code !== "ESRCH") throw error; }
+  }
+  return pids;
+}
+
+function stopMatchingDownload(config) {
+  return signalDownloadPids(activePids(config));
 }
 
 function saveState(patch) {
@@ -112,12 +133,35 @@ function readConfig() {
   return config;
 }
 
+export function mountedAt(mountOutput, mountPoint) {
+  return mountOutput.split("\n").some((line) => line.includes(` on ${mountPoint} (`));
+}
+
 function identity(config) {
+  let mounts;
+  try { mounts = command("/sbin/mount", []); }
+  catch { return { reason: "Cannot inspect the mount table", stop: false }; }
+  if (!mountedAt(mounts, config.mountPoint)) return { reason: "AIARK is not mounted", stop: true };
   let disk;
   try { disk = diskInfo(config.mountPoint); }
-  catch { return "AIARK is not mounted"; }
-  const ark = readJson(path.join(config.mountPoint, "AIARK", "ark.json"));
-  return validateDisk(disk, ark, config);
+  catch { return { reason: "Cannot verify the mounted disk identity", stop: false }; }
+  let ark;
+  try { ark = JSON.parse(fs.readFileSync(path.join(config.mountPoint, "AIARK", "ark.json"), "utf8")); }
+  catch (error) {
+    return error.code === "ENOENT" || error instanceof SyntaxError
+      ? { reason: "The AiArk identity file is missing or invalid", stop: true }
+      : { reason: "Cannot read the AiArk identity file", stop: false };
+  }
+  const invalid = validateDisk(disk, ark, config);
+  return invalid ? { reason: invalid, stop: true } : null;
+}
+
+function recordIdentityFailure(config, issue, extra = {}) {
+  const pids = issue.stop ? stopMatchingDownload(config) : activePids(config);
+  saveState({ ...extra, status: issue.stop ? "waiting_for_disk" : "needs_attention", aria2Pid: pids[0] ?? null,
+    reason: issue.stop
+      ? `${issue.reason}; ${pids.length ? "matching download was asked to stop" : "no matching download is running"}`
+      : `${issue.reason}; matching download was left intact` });
 }
 
 function completedPaths(logFile) {
@@ -188,9 +232,13 @@ async function check() {
 
 async function checkUnlocked() {
   const config = readConfig();
-  if (fs.existsSync(PAUSE_FILE)) { saveState({ status: "paused", reason: "User pause marker is present" }); return; }
+  if (fs.existsSync(PAUSE_FILE)) {
+    const stopping = stopMatchingDownload(config);
+    saveState({ status: "paused", aria2Pid: stopping[0] ?? null, reason: "User pause marker is present; matching download was asked to stop" });
+    return;
+  }
   const invalid = identity(config);
-  if (invalid) { saveState({ status: "waiting_for_disk", reason: invalid }); return; }
+  if (invalid) { recordIdentityFailure(config, invalid); return; }
   if (!fs.existsSync(config.manifestFile) || !fs.existsSync(config.originalQueue)) {
     saveState({ status: "needs_attention", reason: "The manifest or original download queue is missing" });
     return;
@@ -218,6 +266,8 @@ async function checkUnlocked() {
   }
   const pids = activePids(config);
   if (pids.length > 0) {
+    const changedWhileActive = identity(config);
+    if (changedWhileActive) { recordIdentityFailure(config, changedWhileActive, status); return; }
     const lastProgress = Date.parse(status.lastProgressAt);
     const stalled = Number.isFinite(lastProgress) && Date.now() - lastProgress > 60 * 60_000;
     saveState({ ...status, status: stalled ? "slow_or_stalled" : "downloading", aria2Pid: pids[0], reason: stalled ? "No file progress for over one hour; process left intact for inspection" : null });
@@ -230,7 +280,7 @@ async function checkUnlocked() {
   // A user may pause or remove the disk during the network probe.
   if (fs.existsSync(PAUSE_FILE)) { saveState({ ...status, status: "paused", reason: "User pause marker is present" }); return; }
   const changed = identity(config);
-  if (changed) { saveState({ ...status, status: "waiting_for_disk", reason: changed }); return; }
+  if (changed) { recordIdentityFailure(config, changed, status); return; }
   if (activePids(config).length) { saveState({ ...status, status: "downloading", reason: null }); return; }
   startDownload(config, progress.pending);
   await new Promise((resolve) => setTimeout(resolve, 1800));
@@ -243,6 +293,12 @@ async function checkUnlocked() {
 
 function xml(value) {
   return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+function refreshInstalledScript() {
+  if (process.platform !== "darwin") throw new Error("This helper currently supports macOS only");
+  writeAtomic(INSTALLED_SCRIPT, fs.readFileSync(SCRIPT));
+  console.log(`Updated installed watchdog script: ${INSTALLED_SCRIPT}`);
 }
 
 async function install() {
@@ -264,11 +320,10 @@ async function install() {
   writeAtomic(CONFIG_FILE, `${JSON.stringify(config, null, 2)}\n`);
   // LaunchAgents lack the desktop app's Documents-folder privacy grant. Keep
   // their executable code in per-user Application Support, outside Documents.
-  const installedScript = path.join(DATA_DIR, "vault-watchdog.mjs");
-  writeAtomic(installedScript, fs.readFileSync(SCRIPT));
+  refreshInstalledScript();
   const logDir = path.join(os.homedir(), "Library", "Logs", "AiArk");
   fs.mkdirSync(logDir, { recursive: true });
-  const plist = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>Label</key><string>${LABEL}</string>\n<key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(installedScript)}</string><string>check</string></array>\n<key>RunAtLoad</key><true/>\n<key>StartInterval</key><integer>120</integer>\n<key>AbandonProcessGroup</key><true/>\n<key>StandardOutPath</key><string>${xml(path.join(logDir, "vault-watchdog.log"))}</string>\n<key>StandardErrorPath</key><string>${xml(path.join(logDir, "vault-watchdog-error.log"))}</string>\n</dict></plist>\n`;
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>Label</key><string>${LABEL}</string>\n<key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(INSTALLED_SCRIPT)}</string><string>check</string></array>\n<key>RunAtLoad</key><true/>\n<key>StartInterval</key><integer>120</integer>\n<key>AbandonProcessGroup</key><true/>\n<key>StandardOutPath</key><string>${xml(path.join(logDir, "vault-watchdog.log"))}</string>\n<key>StandardErrorPath</key><string>${xml(path.join(logDir, "vault-watchdog-error.log"))}</string>\n</dict></plist>\n`;
   writeAtomic(PLIST_FILE, plist);
   const domain = `gui/${process.getuid()}`;
   try { command("/bin/launchctl", ["bootout", `${domain}/${LABEL}`]); } catch { /* first installation */ }
@@ -287,8 +342,7 @@ async function install() {
 async function pause() {
   const config = readConfig();
   writeAtomic(PAUSE_FILE, `${new Date().toISOString()}\n`);
-  const pids = activePids(config);
-  for (const pid of pids) process.kill(pid, "SIGINT");
+  stopMatchingDownload(config);
   for (let i = 0; i < 30 && activePids(config).length; i++) await new Promise((resolve) => setTimeout(resolve, 1000));
   saveState({ status: activePids(config).length ? "pause_requested" : "paused", reason: "User requested a graceful stop" });
   console.log(activePids(config).length ? "Graceful shutdown still in progress" : "Vault download paused safely");
@@ -305,9 +359,30 @@ async function watch() {
   }
 }
 
+async function restartFallback() {
+  if (process.platform !== "darwin") throw new Error("The detached fallback currently supports macOS only");
+  readConfig();
+  if (!fs.existsSync(INSTALLED_SCRIPT)) throw new Error(`Installed watchdog script is missing: ${INSTALLED_SCRIPT}`);
+  const running = () => watchProcessPids(command("/bin/ps", ["-axo", "pid=,command="]), INSTALLED_SCRIPT)
+    .filter((pid) => pid !== process.pid);
+  for (const pid of running()) {
+    try { process.kill(pid, "SIGTERM"); }
+    catch (error) { if (error.code !== "ESRCH") throw error; }
+  }
+  for (let i = 0; i < 20 && running().length; i++) await new Promise((resolve) => setTimeout(resolve, 250));
+  if (running().length) throw new Error("Previous detached watchdog did not exit; refusing to start a duplicate");
+  command("/usr/bin/screen", ["-dmS", "aiark-vault-watchdog", process.execPath, INSTALLED_SCRIPT, "watch"]);
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  const started = running();
+  if (started.length !== 1) throw new Error(`Expected one detached watchdog, found ${started.length}`);
+  console.log(`Detached watchdog is running as PID ${started[0]}`);
+}
+
 async function main() {
   const action = process.argv[2] ?? "status";
   if (action === "install") await install();
+  else if (action === "refresh") refreshInstalledScript();
+  else if (action === "restart-fallback") await restartFallback();
   else if (action === "check") await check();
   else if (action === "pause") await pause();
   else if (action === "resume") { if (fs.existsSync(PAUSE_FILE)) fs.unlinkSync(PAUSE_FILE); await check(); }
