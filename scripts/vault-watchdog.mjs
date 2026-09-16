@@ -14,6 +14,7 @@ const STATE_FILE = path.join(DATA_DIR, "state.json");
 const PAUSE_FILE = path.join(DATA_DIR, "paused");
 const LOCK_DIR = path.join(DATA_DIR, "check.lock");
 const INSTALLED_SCRIPT = path.join(DATA_DIR, "vault-watchdog.mjs");
+const CHECK_INTERVAL_MS = 30_000;
 const LABEL = "dev.aiark.vault-watchdog";
 const PLIST_FILE = path.join(os.homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
 
@@ -323,7 +324,7 @@ async function install() {
   refreshInstalledScript();
   const logDir = path.join(os.homedir(), "Library", "Logs", "AiArk");
   fs.mkdirSync(logDir, { recursive: true });
-  const plist = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>Label</key><string>${LABEL}</string>\n<key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(INSTALLED_SCRIPT)}</string><string>check</string></array>\n<key>RunAtLoad</key><true/>\n<key>StartInterval</key><integer>120</integer>\n<key>AbandonProcessGroup</key><true/>\n<key>StandardOutPath</key><string>${xml(path.join(logDir, "vault-watchdog.log"))}</string>\n<key>StandardErrorPath</key><string>${xml(path.join(logDir, "vault-watchdog-error.log"))}</string>\n</dict></plist>\n`;
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>Label</key><string>${LABEL}</string>\n<key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(INSTALLED_SCRIPT)}</string><string>check</string></array>\n<key>RunAtLoad</key><true/>\n<key>StartInterval</key><integer>${CHECK_INTERVAL_MS / 1000}</integer>\n<key>AbandonProcessGroup</key><true/>\n<key>StandardOutPath</key><string>${xml(path.join(logDir, "vault-watchdog.log"))}</string>\n<key>StandardErrorPath</key><string>${xml(path.join(logDir, "vault-watchdog-error.log"))}</string>\n</dict></plist>\n`;
   writeAtomic(PLIST_FILE, plist);
   const domain = `gui/${process.getuid()}`;
   try { command("/bin/launchctl", ["bootout", `${domain}/${LABEL}`]); } catch { /* first installation */ }
@@ -336,7 +337,7 @@ async function install() {
     }
   }
   command("/bin/launchctl", ["kickstart", "-k", `${domain}/${LABEL}`]);
-  console.log(`Installed ${LABEL}: checks every 120 seconds; config ${CONFIG_FILE}`);
+  console.log(`Installed ${LABEL}: checks every ${CHECK_INTERVAL_MS / 1000} seconds; config ${CONFIG_FILE}`);
 }
 
 async function pause() {
@@ -355,7 +356,7 @@ async function watch() {
       console.error(`Watchdog check failed: ${error.message}`);
       saveState({ status: "needs_attention", reason: error.message });
     }
-    await new Promise((resolve) => setTimeout(resolve, 120_000));
+    await new Promise((resolve) => setTimeout(resolve, CHECK_INTERVAL_MS));
   }
 }
 
