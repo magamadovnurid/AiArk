@@ -223,6 +223,12 @@ function acquireCheckLock() {
 }
 
 async function check() {
+  // A launchd worker may wait for macOS removable-volume consent on its first
+  // file open. Do that before taking the shared lock so the detached fallback
+  // can keep monitoring while the system prompt awaits the user.
+  const config = readConfig();
+  try { fs.readFileSync(path.join(config.mountPoint, "AIARK", "ark.json")); }
+  catch { /* identity() classifies absent, changed, and inaccessible disks */ }
   if (!acquireCheckLock()) return;
   try { await checkUnlocked(); }
   finally {
