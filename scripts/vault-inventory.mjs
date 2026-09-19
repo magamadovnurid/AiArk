@@ -8,7 +8,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { downloadProcessPids, gatedDownloadProcessPids } from "./vault-watchdog.mjs";
+import { downloadProcessPids, gatedDownloadProcessPids, modelScopeProcessPids } from "./vault-watchdog.mjs";
 
 const SCRIPT = fileURLToPath(import.meta.url);
 
@@ -110,7 +110,9 @@ async function main() {
     const gatedPids = root === path.join(config?.mountPoint ?? "", "AIARK")
       ? (config.approvedGatedPackages ?? []).flatMap((item) => gatedDownloadProcessPids(
         processes, item.repository, item.revision, path.join(root, item.localPath))) : [];
-    if (downloadProcessPids(processes, session).length || gatedPids.length) {
+    const mirrorPids = root === path.join(config?.mountPoint ?? "", "AIARK") && config.approvedModelScopePackage
+      ? modelScopeProcessPids(processes, path.join(path.dirname(configFile), "vault-modelscope-download.mjs"), root) : [];
+    if (downloadProcessPids(processes, session).length || gatedPids.length || mirrorPids.length) {
       throw new Error("Stop the matching vault downloader before the full SHA-256 audit");
     }
   }
