@@ -22,3 +22,19 @@ macOS may ask whether `/usr/local/bin/node` may access removable volumes the fir
 If that permission prompt is deferred, run `npm run vault:watch:restart-fallback` from the source checkout to start or replace a detached user-session watchdog. It checks every 30 seconds; the helper uses an interprocess lock so the fallback and LaunchAgent cannot restart the same queue together. Do not use `screen -X quit` alone to replace it: that can leave an orphaned Node worker. The fallback survives terminal closure but not a Mac restart, unlike the LaunchAgent.
 
 The service intentionally reports prolonged lack of file progress as `slow_or_stalled` without killing a potentially valid checksum pass. The separate AiArk monitoring task can inspect and decide whether a controlled restart is warranted. When every public file has its expected size and either no `.aria2` control file remains or aria2 logged its completion, the service stops relaunching the queue; a full checksum audit remains necessary. Gated Hugging Face files are excluded until the account has accepted their licenses and authenticated locally.
+
+## Inventory and final integrity audit
+
+The read-only inventory command compares every manifest entry with the ark and records missing, partial, oversized, and complete files. It does not read full model contents by default, so it is safe to use while the downloader is working:
+
+```bash
+npm run vault:inventory -- --ark /Volumes/AIARK/AIARK --summary
+```
+
+After **all downloads have stopped**, run a full SHA-256 audit (this reads terabytes and can take hours). On macOS the command refuses to start if the matching vault downloader is still running:
+
+```bash
+npm run vault:inventory -- --ark /Volumes/AIARK/AIARK --sha256
+```
+
+The full JSON report lists each file without including download URLs or credentials. A file without a checksum in the source manifest is marked `present`, not `verified`. An aria2 control file marks a file as `partial` even if its current size matches, unless the download log records its completion. The command never formats or changes the disk.
