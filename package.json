@@ -35,7 +35,8 @@
     "vault:watch:restart-fallback": "node scripts/vault-watchdog.mjs restart-fallback",
     "vault:watch:status": "node scripts/vault-watchdog.mjs status",
     "vault:watch:pause": "node scripts/vault-watchdog.mjs pause",
-    "vault:watch:resume": "node scripts/vault-watchdog.mjs resume"
+    "vault:watch:resume": "node scripts/vault-watchdog.mjs resume",
+    "vault:inventory": "node scripts/vault-inventory.mjs"
   },
   "build": {
     "appId": "dev.aiark.desktop",
