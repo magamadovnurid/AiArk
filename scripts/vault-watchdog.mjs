@@ -14,6 +14,7 @@ const STATE_FILE = path.join(DATA_DIR, "state.json");
 const PAUSE_FILE = path.join(DATA_DIR, "paused");
 const LOCK_DIR = path.join(DATA_DIR, "check.lock");
 const INSTALLED_SCRIPT = path.join(DATA_DIR, "vault-watchdog.mjs");
+const INSTALLED_MODELSCOPE_SCRIPT = path.join(DATA_DIR, "vault-modelscope-download.mjs");
 const CHECK_INTERVAL_MS = 30_000;
 const LABEL = "dev.aiark.vault-watchdog";
 const PLIST_FILE = path.join(os.homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
@@ -116,6 +117,14 @@ export function gatedDownloadProcessPids(psOutput, repository, revision, localDi
   });
 }
 
+export function modelScopeProcessPids(psOutput, installedScript, root) {
+  return psOutput.split("\n").flatMap((line) => {
+    const match = line.match(/^\s*(\d+)\s+(.+)$/);
+    if (!match || !/^(?:\S*\/)?node\s/.test(match[2])) return [];
+    return match[2].includes(`${installedScript} ${root}`) ? [Number(match[1])] : [];
+  });
+}
+
 function activePids(config) {
   const output = command("/bin/ps", ["-axo", "pid=,command="]);
   return downloadProcessPids(output, config.resumeFile);
@@ -142,6 +151,7 @@ export function preserveApprovedGatedConfig(config, previous) {
   return { ...config,
     ...(previous.hfPath ? { hfPath: previous.hfPath } : {}),
     ...(Array.isArray(previous.approvedGatedPackages) ? { approvedGatedPackages: previous.approvedGatedPackages } : {}),
+    ...(previous.approvedModelScopePackage ? { approvedModelScopePackage: previous.approvedModelScopePackage } : {}),
   };
 }
 
@@ -155,6 +165,16 @@ function activeGatedPids(config) {
 
 function stopMatchingGatedDownloads(config) {
   return signalDownloadPids(activeGatedPids(config));
+}
+
+function activeModelScopePids(config) {
+  if (config.approvedModelScopePackage !== "ltx-2.3-gemma-encoder") return [];
+  return modelScopeProcessPids(command("/bin/ps", ["-axo", "pid=,command="]),
+    INSTALLED_MODELSCOPE_SCRIPT, path.join(config.mountPoint, "AIARK"));
+}
+
+function stopMatchingModelScopeDownload(config) {
+  return signalDownloadPids(activeModelScopePids(config));
 }
 
 function saveState(patch) {
@@ -198,11 +218,49 @@ function identity(config) {
 function recordIdentityFailure(config, issue, extra = {}) {
   const pids = issue.stop ? stopMatchingDownload(config) : activePids(config);
   const gatedPids = issue.stop ? stopMatchingGatedDownloads(config) : activeGatedPids(config);
+  const mirrorPids = issue.stop ? stopMatchingModelScopeDownload(config) : activeModelScopePids(config);
   saveState({ ...extra, status: issue.stop ? "waiting_for_disk" : "needs_attention", aria2Pid: pids[0] ?? null,
     gatedPid: gatedPids[0] ?? null, gatedStatus: issue.stop ? "waiting_for_disk" : "needs_attention",
+    mirrorPid: mirrorPids[0] ?? null, mirrorStatus: issue.stop ? "waiting_for_disk" : "needs_attention",
     reason: issue.stop
-      ? `${issue.reason}; ${pids.length || gatedPids.length ? "matching downloads were asked to stop" : "no matching download is running"}`
+      ? `${issue.reason}; ${pids.length || gatedPids.length || mirrorPids.length ? "matching downloads were asked to stop" : "no matching download is running"}`
       : `${issue.reason}; matching downloads were left intact` });
+}
+
+function ensureModelScopeDownload(config, manifest) {
+  if (config.approvedModelScopePackage !== "ltx-2.3-gemma-encoder") return;
+  const item = manifest.packages.find((entry) => entry.id === config.approvedModelScopePackage);
+  const root = path.join(config.mountPoint, "AIARK");
+  const expected = path.join(root, "models", "video", config.approvedModelScopePackage);
+  if (!item?.gated || item.repository !== "google/gemma-3-12b-it-qat-q4_0-unquantized" ||
+      item.files?.length !== 18 || item.files.some((file) => path.resolve(file.destination) !== path.resolve(expected, file.path))) {
+    throw new Error("Invalid approved ModelScope package");
+  }
+  const complete = item.files.filter((file) => {
+    try { const stat = fs.statSync(file.destination); return stat.isFile() && stat.size === file.sizeBytes; }
+    catch { return false; }
+  }).length;
+  const active = activeModelScopePids(config);
+  const ledger = path.join(root, ".aiark", "checksums", `${config.approvedModelScopePackage}.json`);
+  if (complete === item.files.length && fs.existsSync(ledger)) {
+    saveState({ mirrorStatus: active.length ? "finalizing" : "files-present-pending-audit", mirrorPid: active[0] ?? null,
+      mirrorCompleteFiles: complete });
+    return;
+  }
+  const previous = readJson(STATE_FILE, {});
+  if (!active.length && !fs.existsSync(PAUSE_FILE) &&
+      (!previous.mirrorLastStartAt || Date.now() - Date.parse(previous.mirrorLastStartAt) > 10 * 60_000)) {
+    if (identity(config)) return;
+    if (!fs.existsSync(INSTALLED_MODELSCOPE_SCRIPT)) throw new Error("Installed ModelScope worker is missing");
+    const logDir = path.join(os.homedir(), "Library", "Logs", "AiArk", "modelscope-gemma");
+    fs.mkdirSync(logDir, { recursive: true });
+    command("/usr/bin/screen", ["-dmS", "aiark-gemma-modelscope", "-L", "/usr/bin/caffeinate", "-i", "-m", "-s",
+      process.execPath, INSTALLED_MODELSCOPE_SCRIPT, root], { cwd: logDir });
+    saveState({ mirrorStatus: "starting", mirrorLastStartAt: new Date().toISOString(), mirrorCompleteFiles: complete });
+    return;
+  }
+  saveState({ mirrorStatus: active.length ? "downloading" : "waiting-to-retry", mirrorPid: active[0] ?? null,
+    mirrorCompleteFiles: complete });
 }
 
 function approvedGatedProgress(config, manifest) {
@@ -332,24 +390,29 @@ async function checkUnlocked() {
   if (fs.existsSync(PAUSE_FILE)) {
     const stopping = stopMatchingDownload(config);
     const gatedStopping = stopMatchingGatedDownloads(config);
+    const mirrorStopping = stopMatchingModelScopeDownload(config);
     saveState({ status: "paused", aria2Pid: stopping[0] ?? null, gatedPid: gatedStopping[0] ?? null,
-      gatedStatus: "paused", reason: "User pause marker is present; matching downloads were asked to stop" });
+      gatedStatus: "paused", mirrorPid: mirrorStopping[0] ?? null, mirrorStatus: "paused",
+      reason: "User pause marker is present; matching downloads were asked to stop" });
     return;
   }
   const invalid = identity(config);
   if (invalid) { recordIdentityFailure(config, invalid); return; }
   if (!fs.existsSync(config.manifestFile) || !fs.existsSync(config.originalQueue)) {
     stopMatchingGatedDownloads(config);
+    stopMatchingModelScopeDownload(config);
     saveState({ status: "needs_attention", reason: "The manifest or original download queue is missing" });
     return;
   }
   const manifest = readJson(config.manifestFile);
   if (manifest?.schemaVersion !== 1 || !Array.isArray(manifest.packages)) {
     stopMatchingGatedDownloads(config);
+    stopMatchingModelScopeDownload(config);
     saveState({ status: "needs_attention", reason: "Invalid vault manifest" });
     return;
   }
   ensureApprovedGatedDownloads(config, manifest);
+  ensureModelScopeDownload(config, manifest);
   const progress = pendingPublicFiles(manifest, path.join(config.mountPoint, "AIARK"),
     (file) => fs.statSync(file), (file) => fs.existsSync(file), completedPaths(config.logFile));
   const previous = readJson(STATE_FILE, {});
@@ -400,6 +463,7 @@ function xml(value) {
 function refreshInstalledScript() {
   if (process.platform !== "darwin") throw new Error("This helper currently supports macOS only");
   writeAtomic(INSTALLED_SCRIPT, fs.readFileSync(SCRIPT));
+  writeAtomic(INSTALLED_MODELSCOPE_SCRIPT, fs.readFileSync(path.join(path.dirname(SCRIPT), "vault-modelscope-download.mjs")));
   console.log(`Updated installed watchdog script: ${INSTALLED_SCRIPT}`);
 }
 
@@ -450,11 +514,12 @@ async function pause() {
   writeAtomic(PAUSE_FILE, `${new Date().toISOString()}\n`);
   stopMatchingDownload(config);
   stopMatchingGatedDownloads(config);
-  for (let i = 0; i < 30 && (activePids(config).length || activeGatedPids(config).length); i++)
+  stopMatchingModelScopeDownload(config);
+  for (let i = 0; i < 30 && (activePids(config).length || activeGatedPids(config).length || activeModelScopePids(config).length); i++)
     await new Promise((resolve) => setTimeout(resolve, 1000));
-  const running = activePids(config).length || activeGatedPids(config).length;
+  const running = activePids(config).length || activeGatedPids(config).length || activeModelScopePids(config).length;
   saveState({ status: running ? "pause_requested" : "paused", gatedStatus: running ? "pause_requested" : "paused",
-    gatedLastStartAt: null,
+    mirrorStatus: running ? "pause_requested" : "paused", gatedLastStartAt: null, mirrorLastStartAt: null,
     reason: "User requested a graceful stop" });
   console.log(running ? "Graceful shutdown still in progress" : "Vault download paused safely");
 }

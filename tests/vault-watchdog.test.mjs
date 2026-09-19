@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
-import { downloadProcessPids, gatedDownloadProcessPids, mountedAt, pendingPublicFiles, preserveApprovedGatedConfig, queueText, signalDownloadPids, validateDisk, watchProcessPids } from "../scripts/vault-watchdog.mjs";
+import { downloadProcessPids, gatedDownloadProcessPids, modelScopeProcessPids, mountedAt, pendingPublicFiles, preserveApprovedGatedConfig, queueText, signalDownloadPids, validateDisk, watchProcessPids } from "../scripts/vault-watchdog.mjs";
 
 const config = { mountPoint: "/Volumes/AIARK", diskUUID: "volume-123", arkId: "ark-123", diskFingerprint: "finger-123" };
 const disk = { MountPoint: "/Volumes/AIARK", VolumeName: "AIARK", Internal: false,
@@ -68,10 +68,22 @@ describe("vault watchdog safety", () => {
 
   it("keeps gated approvals only when reinstalling for the exact same ark", () => {
     const fresh = { arkId: "ark", diskUUID: "disk", mountPoint: "/Volumes/AIARK" };
-    const prior = { ...fresh, hfPath: "/opt/homebrew/bin/hf", approvedGatedPackages: [{ id: "flux" }] };
-    expect(preserveApprovedGatedConfig(fresh, prior)).toMatchObject({ hfPath: prior.hfPath, approvedGatedPackages: prior.approvedGatedPackages });
+    const prior = { ...fresh, hfPath: "/opt/homebrew/bin/hf", approvedGatedPackages: [{ id: "flux" }],
+      approvedModelScopePackage: "ltx-2.3-gemma-encoder" };
+    expect(preserveApprovedGatedConfig(fresh, prior)).toMatchObject({ hfPath: prior.hfPath,
+      approvedGatedPackages: prior.approvedGatedPackages, approvedModelScopePackage: prior.approvedModelScopePackage });
     expect(preserveApprovedGatedConfig(fresh, { ...prior, diskUUID: "other" })).toEqual(fresh);
     expect(preserveApprovedGatedConfig(fresh, { ...prior, arkId: "other" })).toEqual(fresh);
+  });
+
+  it("stops only the exact ModelScope worker, not wrappers or an unrelated worker", () => {
+    const script = "/Users/mns/Library/Application Support/AiArk/VaultWatchdog/vault-modelscope-download.mjs";
+    const root = "/Volumes/AIARK/AIARK";
+    const ps = `1 SCREEN -dmS aiark-gemma-modelscope /usr/local/bin/node ${script} ${root}\n` +
+      `2 login -pflq mns /usr/local/bin/node ${script} ${root}\n` +
+      `3 /usr/local/bin/node ${script} ${root}\n` +
+      `4 /usr/local/bin/node ${script} /Volumes/OTHER/AIARK\n`;
+    expect(modelScopeProcessPids(ps, script, root)).toEqual([3]);
   });
 
   it("signals only matching download PIDs and tolerates an already exited process", () => {
