@@ -102,6 +102,20 @@ export function watchProcessPids(psOutput, installedScript) {
   });
 }
 
+export function gatedDownloadProcessPids(psOutput, repository, revision, localDir) {
+  return psOutput.split("\n").flatMap((line) => {
+    const match = line.match(/^\s*(\d+)\s+(.+)$/);
+    if (!match) return [];
+    const args = match[2];
+    // The hf executable is a Python script on Homebrew. Ignore screen,
+    // caffeinate and login wrappers; only signal the actual downloader.
+    if (!/^(?:\S+\/Python\s+)?\S*\/hf\s+download\s/.test(args)) return [];
+    if (!args.includes(`hf download ${repository} `) || !args.includes(`--revision ${revision} `) ||
+        !args.includes(`--local-dir ${localDir} `)) return [];
+    return [Number(match[1])];
+  });
+}
+
 function activePids(config) {
   const output = command("/bin/ps", ["-axo", "pid=,command="]);
   return downloadProcessPids(output, config.resumeFile);
@@ -117,6 +131,30 @@ export function signalDownloadPids(pids, signal = (pid) => process.kill(pid, "SI
 
 function stopMatchingDownload(config) {
   return signalDownloadPids(activePids(config));
+}
+
+function approvedGatedPackages(config) {
+  return Array.isArray(config.approvedGatedPackages) ? config.approvedGatedPackages : [];
+}
+
+export function preserveApprovedGatedConfig(config, previous) {
+  if (previous?.arkId !== config.arkId || previous?.diskUUID !== config.diskUUID) return config;
+  return { ...config,
+    ...(previous.hfPath ? { hfPath: previous.hfPath } : {}),
+    ...(Array.isArray(previous.approvedGatedPackages) ? { approvedGatedPackages: previous.approvedGatedPackages } : {}),
+  };
+}
+
+function activeGatedPids(config) {
+  if (!approvedGatedPackages(config).length) return [];
+  const output = command("/bin/ps", ["-axo", "pid=,command="]);
+  return approvedGatedPackages(config).flatMap((item) => gatedDownloadProcessPids(
+    output, item.repository, item.revision, path.join(config.mountPoint, "AIARK", item.localPath),
+  ));
+}
+
+function stopMatchingGatedDownloads(config) {
+  return signalDownloadPids(activeGatedPids(config));
 }
 
 function saveState(patch) {
@@ -159,10 +197,62 @@ function identity(config) {
 
 function recordIdentityFailure(config, issue, extra = {}) {
   const pids = issue.stop ? stopMatchingDownload(config) : activePids(config);
+  const gatedPids = issue.stop ? stopMatchingGatedDownloads(config) : activeGatedPids(config);
   saveState({ ...extra, status: issue.stop ? "waiting_for_disk" : "needs_attention", aria2Pid: pids[0] ?? null,
+    gatedPid: gatedPids[0] ?? null, gatedStatus: issue.stop ? "waiting_for_disk" : "needs_attention",
     reason: issue.stop
-      ? `${issue.reason}; ${pids.length ? "matching download was asked to stop" : "no matching download is running"}`
-      : `${issue.reason}; matching download was left intact` });
+      ? `${issue.reason}; ${pids.length || gatedPids.length ? "matching downloads were asked to stop" : "no matching download is running"}`
+      : `${issue.reason}; matching downloads were left intact` });
+}
+
+function approvedGatedProgress(config, manifest) {
+  const root = path.join(config.mountPoint, "AIARK");
+  return approvedGatedPackages(config).map((approved) => {
+    const item = manifest.packages.find((candidate) => candidate.id === approved.id);
+    const localDir = path.join(root, approved.localPath);
+    if (!item?.gated || item.repository !== approved.repository || item.revision !== approved.revision ||
+        !path.relative(root, localDir).startsWith(`models${path.sep}`) ||
+        !item.files?.length) throw new Error(`Invalid approved gated package: ${approved.id}`);
+    let complete = 0;
+    for (const file of item.files) {
+      if (!file.path || path.isAbsolute(file.path) || file.path.split("/").includes("..") ||
+          path.resolve(localDir, file.path) !== path.resolve(file.destination)) {
+        throw new Error(`Unsafe gated manifest path: ${approved.id}`);
+      }
+      try { const stat = fs.statSync(file.destination); if (stat.isFile() && stat.size === file.sizeBytes) complete += 1; }
+      catch { /* missing file */ }
+    }
+    return { approved, item, localDir, complete, pending: item.files.length - complete };
+  });
+}
+
+function ensureApprovedGatedDownloads(config, manifest) {
+  const packages = approvedGatedProgress(config, manifest);
+  if (!packages.length) return;
+  const prior = readJson(STATE_FILE, {});
+  const active = activeGatedPids(config);
+  const incomplete = packages.filter((entry) => entry.pending > 0);
+  if (!incomplete.length) {
+    saveState({ gatedStatus: active.length ? "finalizing" : "files-present-pending-audit", gatedPid: active[0] ?? null,
+      gatedCompleteFiles: packages.reduce((sum, entry) => sum + entry.complete, 0) });
+    return;
+  }
+  if (!active.length && !fs.existsSync(PAUSE_FILE) &&
+      (!prior.gatedLastStartAt || Date.now() - Date.parse(prior.gatedLastStartAt) > 10 * 60_000)) {
+    const entry = incomplete[0];
+    if (identity(config)) return;
+    const hfPath = config.hfPath;
+    if (!hfPath || !path.isAbsolute(hfPath)) throw new Error("Hugging Face CLI path is not configured");
+    const logDir = path.join(os.homedir(), "Library", "Logs", "AiArk");
+    fs.mkdirSync(logDir, { recursive: true });
+    command("/usr/bin/screen", ["-dmS", "aiark-flux-download", "-L", "/usr/bin/caffeinate", "-i", "-m", "-s",
+      hfPath, "download", entry.item.repository, ...entry.item.files.map((file) => file.path),
+      "--revision", entry.item.revision, "--local-dir", entry.localDir, "--max-workers", "1"], { cwd: logDir });
+    saveState({ gatedStatus: "starting", gatedLastStartAt: new Date().toISOString() });
+    return;
+  }
+  saveState({ gatedStatus: active.length ? "downloading" : "waiting-to-retry", gatedPid: active[0] ?? null,
+    gatedCompleteFiles: packages.reduce((sum, entry) => sum + entry.complete, 0) });
 }
 
 function completedPaths(logFile) {
@@ -241,20 +331,25 @@ async function checkUnlocked() {
   const config = readConfig();
   if (fs.existsSync(PAUSE_FILE)) {
     const stopping = stopMatchingDownload(config);
-    saveState({ status: "paused", aria2Pid: stopping[0] ?? null, reason: "User pause marker is present; matching download was asked to stop" });
+    const gatedStopping = stopMatchingGatedDownloads(config);
+    saveState({ status: "paused", aria2Pid: stopping[0] ?? null, gatedPid: gatedStopping[0] ?? null,
+      gatedStatus: "paused", reason: "User pause marker is present; matching downloads were asked to stop" });
     return;
   }
   const invalid = identity(config);
   if (invalid) { recordIdentityFailure(config, invalid); return; }
   if (!fs.existsSync(config.manifestFile) || !fs.existsSync(config.originalQueue)) {
+    stopMatchingGatedDownloads(config);
     saveState({ status: "needs_attention", reason: "The manifest or original download queue is missing" });
     return;
   }
   const manifest = readJson(config.manifestFile);
   if (manifest?.schemaVersion !== 1 || !Array.isArray(manifest.packages)) {
+    stopMatchingGatedDownloads(config);
     saveState({ status: "needs_attention", reason: "Invalid vault manifest" });
     return;
   }
+  ensureApprovedGatedDownloads(config, manifest);
   const progress = pendingPublicFiles(manifest, path.join(config.mountPoint, "AIARK"),
     (file) => fs.statSync(file), (file) => fs.existsSync(file), completedPaths(config.logFile));
   const previous = readJson(STATE_FILE, {});
@@ -313,7 +408,7 @@ async function install() {
   const mountPoint = "/Volumes/AIARK";
   const disk = diskInfo(mountPoint);
   const ark = readJson(path.join(mountPoint, "AIARK", "ark.json"));
-  const config = {
+  let config = {
     mountPoint, arkId: ark?.arkId, diskFingerprint: ark?.diskFingerprint, diskUUID: disk.DiskUUID,
     aria2Path: command("/usr/bin/which", ["aria2c"]).trim(),
     manifestFile: path.join(mountPoint, "AIARK", "manifests", "vault-standard-4tb.json"),
@@ -321,6 +416,10 @@ async function install() {
     resumeFile: path.join(mountPoint, "AIARK", ".aiark", "downloads", "vault-resume.aria2"),
     logFile: path.join(mountPoint, "AIARK", ".aiark", "logs", "vault-download.log"),
   };
+  // A reinstall must not silently drop already approved gated downloads (or
+  // their pause protection). Keep approvals only for the same verified ark.
+  const previous = readJson(CONFIG_FILE, {});
+  config = preserveApprovedGatedConfig(config, previous);
   const invalid = validateDisk(disk, ark, config);
   if (invalid) throw new Error(`Refusing to install watchdog: ${invalid}`);
   if (!fs.existsSync(config.manifestFile) || !fs.existsSync(config.originalQueue)) throw new Error("Vault manifest or queue is missing");
@@ -350,9 +449,14 @@ async function pause() {
   const config = readConfig();
   writeAtomic(PAUSE_FILE, `${new Date().toISOString()}\n`);
   stopMatchingDownload(config);
-  for (let i = 0; i < 30 && activePids(config).length; i++) await new Promise((resolve) => setTimeout(resolve, 1000));
-  saveState({ status: activePids(config).length ? "pause_requested" : "paused", reason: "User requested a graceful stop" });
-  console.log(activePids(config).length ? "Graceful shutdown still in progress" : "Vault download paused safely");
+  stopMatchingGatedDownloads(config);
+  for (let i = 0; i < 30 && (activePids(config).length || activeGatedPids(config).length); i++)
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  const running = activePids(config).length || activeGatedPids(config).length;
+  saveState({ status: running ? "pause_requested" : "paused", gatedStatus: running ? "pause_requested" : "paused",
+    gatedLastStartAt: null,
+    reason: "User requested a graceful stop" });
+  console.log(running ? "Graceful shutdown still in progress" : "Vault download paused safely");
 }
 
 async function watch() {

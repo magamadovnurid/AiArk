@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
-import { downloadProcessPids, mountedAt, pendingPublicFiles, queueText, signalDownloadPids, validateDisk, watchProcessPids } from "../scripts/vault-watchdog.mjs";
+import { downloadProcessPids, gatedDownloadProcessPids, mountedAt, pendingPublicFiles, preserveApprovedGatedConfig, queueText, signalDownloadPids, validateDisk, watchProcessPids } from "../scripts/vault-watchdog.mjs";
 
 const config = { mountPoint: "/Volumes/AIARK", diskUUID: "volume-123", arkId: "ark-123", diskFingerprint: "finger-123" };
 const disk = { MountPoint: "/Volumes/AIARK", VolumeName: "AIARK", Internal: false,
@@ -51,6 +51,27 @@ describe("vault watchdog safety", () => {
       `  101 aria2c --input-file=/tmp/other --save-session=/tmp/other\n` +
       `  102 aria2c --input-file=/tmp/pending --save-session=${resume}\n`;
     expect(downloadProcessPids(ps, resume)).toEqual([102]);
+  });
+
+  it("recognizes only the exact approved Hugging Face process, not its wrappers", () => {
+    const repo = "black-forest-labs/FLUX.2-klein-9B";
+    const revision = "92196c8e11f7b6cf2b7493e037d8c5345c559216";
+    const dest = "/Volumes/AIARK/AIARK/models/image/flux-2-klein-9b";
+    const invocation = `hf download ${repo} LICENSE.md --revision ${revision} --local-dir ${dest} --max-workers 1`;
+    const ps = `100 /usr/bin/SCREEN -dmS aiark-flux-download /usr/bin/caffeinate ${invocation}\n` +
+      `101 /usr/bin/caffeinate -i /opt/homebrew/bin/${invocation}\n` +
+      `102 /opt/homebrew/Cellar/python/Python /opt/homebrew/bin/${invocation}\n` +
+      `103 /opt/homebrew/Cellar/python/Python /opt/homebrew/bin/hf download other/repo LICENSE.md --revision ${revision} --local-dir ${dest} --max-workers 1\n`;
+    expect(gatedDownloadProcessPids(ps, repo, revision, dest)).toEqual([102]);
+    expect(gatedDownloadProcessPids(ps, repo, revision, `${dest}-other`)).toEqual([]);
+  });
+
+  it("keeps gated approvals only when reinstalling for the exact same ark", () => {
+    const fresh = { arkId: "ark", diskUUID: "disk", mountPoint: "/Volumes/AIARK" };
+    const prior = { ...fresh, hfPath: "/opt/homebrew/bin/hf", approvedGatedPackages: [{ id: "flux" }] };
+    expect(preserveApprovedGatedConfig(fresh, prior)).toMatchObject({ hfPath: prior.hfPath, approvedGatedPackages: prior.approvedGatedPackages });
+    expect(preserveApprovedGatedConfig(fresh, { ...prior, diskUUID: "other" })).toEqual(fresh);
+    expect(preserveApprovedGatedConfig(fresh, { ...prior, arkId: "other" })).toEqual(fresh);
   });
 
   it("signals only matching download PIDs and tolerates an already exited process", () => {

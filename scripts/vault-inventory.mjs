@@ -5,9 +5,10 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { downloadProcessPids } from "./vault-watchdog.mjs";
+import { downloadProcessPids, gatedDownloadProcessPids } from "./vault-watchdog.mjs";
 
 const SCRIPT = fileURLToPath(import.meta.url);
 
@@ -104,7 +105,12 @@ async function main() {
   if (args.includes("--sha256") && process.platform === "darwin") {
     const processes = execFileSync("/bin/ps", ["-axo", "pid=,command="], { encoding: "utf8" });
     const session = path.join(root, ".aiark", "downloads", "vault-resume.aria2");
-    if (downloadProcessPids(processes, session).length) {
+    const configFile = path.join(os.homedir(), "Library", "Application Support", "AiArk", "VaultWatchdog", "config.json");
+    const config = await fs.readFile(configFile, "utf8").then(JSON.parse, () => null);
+    const gatedPids = root === path.join(config?.mountPoint ?? "", "AIARK")
+      ? (config.approvedGatedPackages ?? []).flatMap((item) => gatedDownloadProcessPids(
+        processes, item.repository, item.revision, path.join(root, item.localPath))) : [];
+    if (downloadProcessPids(processes, session).length || gatedPids.length) {
       throw new Error("Stop the matching vault downloader before the full SHA-256 audit");
     }
   }
