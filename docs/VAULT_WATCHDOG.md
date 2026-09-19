@@ -9,7 +9,7 @@ npm run vault:watch:install   # requires the prepared AIARK disk to be connected
 npm run vault:watch:refresh   # update the installed script without loading launchd
 npm run vault:watch:restart-fallback # replace the detached watchdog without duplicating it
 npm run vault:watch:status    # inspect local watchdog state
-npm run vault:watch:pause     # mark paused, send SIGINT, wait for clean aria2 exit
+npm run vault:watch:pause     # stop public and explicitly approved gated downloads
 npm run vault:watch:resume    # clear pause marker and resume on the matching disk
 ```
 
@@ -21,7 +21,9 @@ macOS may ask whether `/usr/local/bin/node` may access removable volumes the fir
 
 If that permission prompt is deferred, run `npm run vault:watch:restart-fallback` from the source checkout to start or replace a detached user-session watchdog. It checks every 30 seconds; the helper uses an interprocess lock so the fallback and LaunchAgent cannot restart the same queue together. Do not use `screen -X quit` alone to replace it: that can leave an orphaned Node worker. The fallback survives terminal closure but not a Mac restart, unlike the LaunchAgent.
 
-The service intentionally reports prolonged lack of file progress as `slow_or_stalled` without killing a potentially valid checksum pass. The separate AiArk monitoring task can inspect and decide whether a controlled restart is warranted. When every public file has its expected size and either no `.aria2` control file remains or aria2 logged its completion, the service stops relaunching the queue; a full checksum audit remains necessary. Gated Hugging Face files are excluded until the account has accepted their licenses and authenticated locally.
+The service intentionally reports prolonged lack of public-file progress as `slow_or_stalled` without killing a potentially valid checksum pass. The separate AiArk monitoring task can inspect and decide whether a controlled restart is warranted. When every public file has its expected size and either no `.aria2` control file remains or aria2 logged its completion, the service stops relaunching the queue; a full checksum audit remains necessary.
+
+Gated files are never added to the public aria2 queue. After the account accepts a model's license, configure a local read-only Hugging Face token with access to that specific repository and explicitly list the package under `approvedGatedPackages` in the private watchdog config, along with `hfPath`. The watchdog then resumes only those pinned manifest files through `hf download --local-dir`, checks the exact disk identity, and includes that process in the same pause/eject safety flow. Do not store tokens or browser cookies in the repo or on AIARK. A model whose license or access is still pending must remain unapproved.
 
 ## Inventory and final integrity audit
 
@@ -31,7 +33,7 @@ The read-only inventory command compares every manifest entry with the ark and r
 npm run vault:inventory -- --ark /Volumes/AIARK/AIARK --summary
 ```
 
-After **all downloads have stopped**, run a full SHA-256 audit (this reads terabytes and can take hours). On macOS the command refuses to start if the matching vault downloader is still running:
+After **all downloads have stopped**, run a full SHA-256 audit (this reads terabytes and can take hours). On macOS the command refuses to start if the matching public or approved gated downloader is still running:
 
 ```bash
 npm run vault:inventory -- --ark /Volumes/AIARK/AIARK --sha256
