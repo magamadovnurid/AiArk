@@ -119,9 +119,8 @@ export function gatedDownloadProcessPids(psOutput, repository, revision, localDi
 
 export function modelScopeProcessPids(psOutput, installedScript, root) {
   return psOutput.split("\n").flatMap((line) => {
-    const match = line.match(/^\s*(\d+)\s+(.+)$/);
-    if (!match || !/^(?:\S*\/)?node\s/.test(match[2])) return [];
-    return match[2].includes(`${installedScript} ${root}`) ? [Number(match[1])] : [];
+    const match = line.match(/^\s*(\d+)\s+(?:\S*\/)?node\s+(.+)$/);
+    return match?.[2].trim() === `${installedScript} ${root}` ? [Number(match[1])] : [];
   });
 }
 

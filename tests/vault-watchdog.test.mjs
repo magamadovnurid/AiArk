@@ -82,7 +82,9 @@ describe("vault watchdog safety", () => {
     const ps = `1 SCREEN -dmS aiark-gemma-modelscope /usr/local/bin/node ${script} ${root}\n` +
       `2 login -pflq mns /usr/local/bin/node ${script} ${root}\n` +
       `3 /usr/local/bin/node ${script} ${root}\n` +
-      `4 /usr/local/bin/node ${script} /Volumes/OTHER/AIARK\n`;
+      `4 /usr/local/bin/node ${script} /Volumes/OTHER/AIARK\n` +
+      `5 /usr/local/bin/node ${script} ${root}-other\n` +
+      `6 /usr/local/bin/node ${script}-other ${root}\n`;
     expect(modelScopeProcessPids(ps, script, root)).toEqual([3]);
   });
 
